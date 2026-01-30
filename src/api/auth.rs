@@ -10,16 +10,15 @@ use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use uuid::Uuid;
 
-#[derive(Deserialize)]
-pub struct RegisterRequest {
-    pub username: Option<String>,
-    pub email: String,
+// password hashing & verification
+use argon2::Argon2;
+use password_hash::rand_core::OsRng;
+use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 
-    pub srp_salt: Option<String>,
-    pub srp_verifier: Option<String>,
+// auth extractor type
+use crate::middleware::AuthUser;
 
-    pub encrypted_vault: Option<String>,
-}
+// RegisterRequest is declared later with the master_password field (duplicate removed)
 
 #[derive(Serialize)]
 pub struct RegisterResponse {
@@ -28,9 +27,17 @@ pub struct RegisterResponse {
 }
 
 #[derive(Deserialize)]
+pub struct RegisterRequest {
+    pub username: Option<String>,
+    pub email: String,
+    pub master_password: String,
+    pub encrypted_vault: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub struct SessionCreateRequest {
     pub email: String,
-    // pub placeholder: Option<String>,
+    pub master_password: String,
 }
 
 #[derive(Serialize)]
@@ -39,10 +46,17 @@ pub struct SessionCreateResponse {
     pub expires_at: String,
 }
 
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 pub fn router() -> Router {
     Router::new()
-        .route("/register", post(register))
-        .route("/session", post(create_session))
+        .route("/register", post(register_user))
+        .route("/session", post(create_session_token))
+        .route("/change-password", post(change_password))
         .route("/health", get(health))
 }
 
@@ -50,11 +64,95 @@ async fn health() -> &'static str {
     "auth ok"
 }
 
-async fn register(
+async fn change_password(
+    auth_user: AuthUser,
+    Extension(state): Extension<Arc<crate::AppState>>,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let pool: &PgPool = &state.db;
+
+    // fetch existing hash for user
+    let row = sqlx::query("SELECT srp_salt, srp_verifier FROM users WHERE id = $1")
+        .bind(auth_user.user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| {
+            eprintln!("db error fetching user for change-password: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let (_db_salt_opt, db_hash_opt) = match row {
+        Some(r) => (
+            r.try_get::<Option<String>, &str>("srp_salt").ok().flatten(),
+            r.try_get::<Option<String>, &str>("srp_verifier")
+                .ok()
+                .flatten(),
+        ),
+        None => (None, None),
+    };
+
+    let db_hash = match db_hash_opt {
+        Some(h) => h,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    // Verify current password
+    let parsed = PasswordHash::new(&db_hash).map_err(|e| {
+        eprintln!("invalid password hash in DB: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Argon2::default()
+        .verify_password(payload.current_password.as_bytes(), &parsed)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // Generate new salt & hash for new password
+    let mut rng = OsRng;
+    let salt = SaltString::generate(&mut rng);
+    let argon2 = Argon2::default();
+    let new_hash = argon2
+        .hash_password(payload.new_password.as_bytes(), &salt)
+        .map_err(|e| {
+            eprintln!("password hash error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .to_string();
+
+    let res = sqlx::query("UPDATE users SET srp_salt = $1, srp_verifier = $2 WHERE id = $3")
+        .bind(salt.as_str())
+        .bind(new_hash)
+        .bind(auth_user.user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            eprintln!("db error updating password: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if res.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    Ok(StatusCode::OK)
+}
+
+async fn register_user(
     Extension(state): Extension<Arc<crate::AppState>>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<AxumJson<RegisterResponse>, StatusCode> {
     let pool: &PgPool = &state.db;
+
+    // generate salt and hash for master password
+    let mut rng = OsRng;
+    let salt = SaltString::generate(&mut rng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(payload.master_password.as_bytes(), &salt)
+        .map_err(|e| {
+            eprintln!("password hash error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .to_string();
 
     let res = sqlx::query(
         r#"
@@ -65,8 +163,8 @@ async fn register(
     )
     .bind(payload.username)
     .bind(&payload.email)
-    .bind(payload.srp_salt)
-    .bind(payload.srp_verifier)
+    .bind(salt.as_str())
+    .bind(password_hash)
     .bind(payload.encrypted_vault)
     .fetch_one(pool)
     .await;
@@ -84,13 +182,14 @@ async fn register(
     }
 }
 
-async fn create_session(
+async fn create_session_token(
     Extension(state): Extension<Arc<crate::AppState>>,
     Json(payload): Json<SessionCreateRequest>,
 ) -> Result<AxumJson<SessionCreateResponse>, StatusCode> {
     let pool: &PgPool = &state.db;
 
-    let user_row = sqlx::query("SELECT id FROM users WHERE email = $1")
+    // fetch user and the stored password hash
+    let user_row = sqlx::query("SELECT id, srp_verifier FROM users WHERE email = $1")
         .bind(&payload.email)
         .fetch_optional(pool)
         .await
@@ -99,13 +198,31 @@ async fn create_session(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let user_id = match user_row {
-        Some(row) => row
-            .try_get::<i32, &str>("id")
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    let (user_id, db_hash) = match user_row {
+        Some(row) => {
+            let id = row
+                .try_get::<i32, &str>("id")
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let hash = row
+                .try_get::<Option<String>, &str>("srp_verifier")
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .ok_or(StatusCode::UNAUTHORIZED)?;
+            (id, hash)
+        }
         None => return Err(StatusCode::NOT_FOUND),
     };
 
+    // verify provided master password against stored hash
+    let parsed = PasswordHash::new(&db_hash).map_err(|e| {
+        eprintln!("invalid password hash in DB: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Argon2::default()
+        .verify_password(payload.master_password.as_bytes(), &parsed)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // password verified, create session
     let session_token = Uuid::new_v4().to_string();
 
     let insert_q = sqlx::query(
