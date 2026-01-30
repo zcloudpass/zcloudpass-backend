@@ -30,8 +30,7 @@ pub struct RegisterResponse {
 #[derive(Deserialize)]
 pub struct SessionCreateRequest {
     pub email: String,
-
-    pub placeholder: Option<String>,
+    // pub placeholder: Option<String>,
 }
 
 #[derive(Serialize)]

@@ -1,4 +1,5 @@
 mod api;
+mod middleware;
 
 use axum::{Extension, Router, routing::get};
 use sqlx::postgres::PgPoolOptions;
@@ -6,8 +7,8 @@ use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
 #[derive(Clone)]
-struct AppState {
-    db: sqlx::PgPool,
+pub struct AppState {
+    pub db: sqlx::PgPool,
 }
 
 #[tokio::main]
@@ -38,6 +39,7 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&bind)
         .await
         .expect("Failed to bind TCP listener");
+
     axum::serve(listener, app).await.unwrap();
 }
 

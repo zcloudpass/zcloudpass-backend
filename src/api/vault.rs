@@ -1,6 +1,7 @@
+use crate::middleware::AuthUser;
 use axum::{
     Router,
-    extract::{Extension, Path},
+    extract::Extension,
     http::StatusCode,
     response::Json,
     routing::{get, put},
@@ -21,18 +22,18 @@ pub struct VaultUpdate {
 
 pub fn router() -> Router {
     Router::new()
-        .route("/{email}", get(get_vault))
-        .route("/{email}", put(update_vault))
+        .route("/", get(get_vault))
+        .route("/", put(update_vault))
 }
 
 async fn get_vault(
+    auth_user: AuthUser,
     Extension(state): Extension<Arc<crate::AppState>>,
-    Path(email): Path<String>,
 ) -> Result<Json<VaultResponse>, StatusCode> {
     let pool: &PgPool = &state.db;
 
-    let row = sqlx::query("SELECT encrypted_vault FROM users WHERE email = $1")
-        .bind(&email)
+    let row = sqlx::query("SELECT encrypted_vault FROM users WHERE id = $1")
+        .bind(auth_user.user_id)
         .fetch_optional(pool)
         .await
         .map_err(|e| {
@@ -50,16 +51,16 @@ async fn get_vault(
 }
 
 async fn update_vault(
+    auth_user: AuthUser,
     Extension(state): Extension<Arc<crate::AppState>>,
-    Path(email): Path<String>,
     axum::Json(payload): axum::Json<VaultUpdate>,
 ) -> Result<StatusCode, StatusCode> {
     let pool: &PgPool = &state.db;
 
     let res =
-        sqlx::query("UPDATE users SET encrypted_vault = $1, last_login = now() WHERE email = $2")
+        sqlx::query("UPDATE users SET encrypted_vault = $1, last_login = now() WHERE id = $2")
             .bind(&payload.encrypted_vault)
-            .bind(&email)
+            .bind(auth_user.user_id)
             .execute(pool)
             .await
             .map_err(|e| {
