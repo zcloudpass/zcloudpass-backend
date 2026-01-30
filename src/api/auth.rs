@@ -55,6 +55,7 @@ pub struct ChangePasswordRequest {
 pub fn router() -> Router {
     Router::new()
         .route("/register", post(register_user))
+        .route("/login", post(create_session_token))
         .route("/session", post(create_session_token))
         .route("/change-password", post(change_password))
         .route("/health", get(health))
