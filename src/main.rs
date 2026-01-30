@@ -42,8 +42,6 @@ async fn main() {
 }
 
 async fn ensure_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    // Try to create the pgcrypto extension separately.
-    // Creation requires superuser privileges; if it fails, log a warning and continue.
     match sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
         .execute(pool)
         .await
@@ -56,7 +54,6 @@ async fn ensure_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         ),
     }
 
-    // Create users table (single statement)
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
@@ -75,7 +72,6 @@ async fn ensure_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // Create sessions table (single statement)
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS sessions (

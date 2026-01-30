@@ -21,8 +21,8 @@ pub struct VaultUpdate {
 
 pub fn router() -> Router {
     Router::new()
-        .route("/:email", get(get_vault))
-        .route("/:email", put(update_vault))
+        .route("/{email}", get(get_vault))
+        .route("/{email}", put(update_vault))
 }
 
 async fn get_vault(

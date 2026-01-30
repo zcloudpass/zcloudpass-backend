@@ -107,7 +107,6 @@ async fn create_session(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    // generate a server-side session token (UUID v4) and persist it
     let session_token = Uuid::new_v4().to_string();
 
     let insert_q = sqlx::query(
