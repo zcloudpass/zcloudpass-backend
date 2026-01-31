@@ -7,7 +7,6 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub user_id: i32,
-    // pub email: String,
 }
 
 impl<S> FromRequestParts<S> for AuthUser
@@ -40,21 +39,42 @@ where
                 .and_then(|hv| hv.to_str().ok())
                 .ok_or(StatusCode::UNAUTHORIZED)?;
 
+            eprintln!(
+                "Auth middleware: raw authorization header: {:?}",
+                auth_header
+            );
+
             let token = if let Some(stripped) = auth_header.strip_prefix("Bearer ") {
-                stripped
+                stripped.trim()
             } else if let Some(stripped) = auth_header.strip_prefix("bearer ") {
-                stripped
+                stripped.trim()
             } else {
+                eprintln!("Auth middleware: authorization header missing Bearer prefix");
                 return Err(StatusCode::UNAUTHORIZED);
             };
 
-            validate_session_token(&pool, token).await
+            eprintln!("Auth middleware: extracted token: {:?}", token);
+
+            let res = validate_session_token(&pool, token).await;
+            match &res {
+                Ok(user) => eprintln!(
+                    "Auth middleware: session valid for user_id={}",
+                    user.user_id
+                ),
+                Err(status) => eprintln!(
+                    "Auth middleware: session validation failed, status={:?}",
+                    status
+                ),
+            }
+            res
         }
         .boxed()
     }
 }
 
 async fn validate_session_token(pool: &PgPool, token: &str) -> Result<AuthUser, StatusCode> {
+    eprintln!("validate_session_token: checking token: {:?}", token);
+
     let result = sqlx::query(
         r#"
         SELECT s.user_id, u.email
@@ -72,6 +92,12 @@ async fn validate_session_token(pool: &PgPool, token: &str) -> Result<AuthUser, 
         eprintln!("Session validation error: {:?}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+
+    if result.is_some() {
+        eprintln!("validate_session_token: session found for token");
+    } else {
+        eprintln!("validate_session_token: no session found for token");
+    }
 
     match result {
         Some(row) => {
@@ -91,7 +117,6 @@ async fn validate_session_token(pool: &PgPool, token: &str) -> Result<AuthUser, 
                     .execute(pool)
                     .await;
 
-            // Ok(AuthUser { user_id, email })
             Ok(AuthUser { user_id })
         }
         None => Err(StatusCode::UNAUTHORIZED),

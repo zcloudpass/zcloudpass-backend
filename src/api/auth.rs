@@ -10,15 +10,11 @@ use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use uuid::Uuid;
 
-// password hashing & verification
 use argon2::Argon2;
 use password_hash::rand_core::OsRng;
 use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 
-// auth extractor type
 use crate::middleware::AuthUser;
-
-// RegisterRequest is declared later with the master_password field (duplicate removed)
 
 #[derive(Serialize)]
 pub struct RegisterResponse {
@@ -72,7 +68,6 @@ async fn change_password(
 ) -> Result<StatusCode, StatusCode> {
     let pool: &PgPool = &state.db;
 
-    // fetch existing hash for user
     let row = sqlx::query("SELECT srp_salt, srp_verifier FROM users WHERE id = $1")
         .bind(auth_user.user_id)
         .fetch_optional(pool)
@@ -97,7 +92,6 @@ async fn change_password(
         None => return Err(StatusCode::UNAUTHORIZED),
     };
 
-    // Verify current password
     let parsed = PasswordHash::new(&db_hash).map_err(|e| {
         eprintln!("invalid password hash in DB: {:?}", e);
         StatusCode::INTERNAL_SERVER_ERROR
@@ -107,7 +101,6 @@ async fn change_password(
         .verify_password(payload.current_password.as_bytes(), &parsed)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    // Generate new salt & hash for new password
     let mut rng = OsRng;
     let salt = SaltString::generate(&mut rng);
     let argon2 = Argon2::default();
@@ -143,7 +136,6 @@ async fn register_user(
 ) -> Result<AxumJson<RegisterResponse>, StatusCode> {
     let pool: &PgPool = &state.db;
 
-    // generate salt and hash for master password
     let mut rng = OsRng;
     let salt = SaltString::generate(&mut rng);
     let argon2 = Argon2::default();
@@ -189,7 +181,6 @@ async fn create_session_token(
 ) -> Result<AxumJson<SessionCreateResponse>, StatusCode> {
     let pool: &PgPool = &state.db;
 
-    // fetch user and the stored password hash
     let user_row = sqlx::query("SELECT id, srp_verifier FROM users WHERE email = $1")
         .bind(&payload.email)
         .fetch_optional(pool)
@@ -213,7 +204,6 @@ async fn create_session_token(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    // verify provided master password against stored hash
     let parsed = PasswordHash::new(&db_hash).map_err(|e| {
         eprintln!("invalid password hash in DB: {:?}", e);
         StatusCode::INTERNAL_SERVER_ERROR
@@ -223,7 +213,6 @@ async fn create_session_token(
         .verify_password(payload.master_password.as_bytes(), &parsed)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    // password verified, create session
     let session_token = Uuid::new_v4().to_string();
 
     let insert_q = sqlx::query(
