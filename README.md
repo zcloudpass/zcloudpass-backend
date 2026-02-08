@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/zcloudpass/zcloudpass/main/assets/rounded/logo.png" alt="ZCloudPass Logo" width="200"/>
-  <h1>ZCloudPass Backend</h1>
+  <img src="https://raw.githubusercontent.com/zcloudpass/zcloudpass/main/assets/rounded/logo.png" alt="zCloudPass Logo" width="200"/>
+  <h1>zCloudPass Backend</h1>
 </div>
 
 A minimal Rust backend for a client-side encrypted vault/password manager. The server provides user registration, session creation, and storage/retrieval of an opaque `encrypted_vault` blob per user. Encryption and all vault entry edits are performed by the client; the server only authenticates and stores the encrypted data.
