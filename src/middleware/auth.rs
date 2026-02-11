@@ -44,14 +44,10 @@ where
                 auth_header
             );
 
-            let token = if let Some(stripped) = auth_header.strip_prefix("Bearer ") {
-                stripped.trim()
-            } else if let Some(stripped) = auth_header.strip_prefix("bearer ") {
-                stripped.trim()
-            } else {
+            let token = extract_bearer_token(auth_header).map_err(|status| {
                 eprintln!("Auth middleware: authorization header missing Bearer prefix");
-                return Err(StatusCode::UNAUTHORIZED);
-            };
+                status
+            })?;
 
             eprintln!("Auth middleware: extracted token: {:?}", token);
 
@@ -69,6 +65,19 @@ where
             res
         }
         .boxed()
+    }
+}
+
+/// Extracts a bearer token from a raw Authorization header value.
+/// Returns `Ok(token)` if the header has a valid `Bearer ` prefix, or
+/// `Err(StatusCode::UNAUTHORIZED)` otherwise.
+pub fn extract_bearer_token(auth_header: &str) -> Result<&str, StatusCode> {
+    if let Some(stripped) = auth_header.strip_prefix("Bearer ") {
+        Ok(stripped.trim())
+    } else if let Some(stripped) = auth_header.strip_prefix("bearer ") {
+        Ok(stripped.trim())
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
     }
 }
 

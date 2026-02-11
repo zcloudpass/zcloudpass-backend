@@ -1,15 +1,10 @@
-mod api;
-mod middleware;
+use zcloudpass_backend::api;
+use zcloudpass_backend::AppState;
 
 use axum::{Extension, Router, routing::get};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db: sqlx::PgPool,
-}
 
 #[tokio::main]
 async fn main() {
