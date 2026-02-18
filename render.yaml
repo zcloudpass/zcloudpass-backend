@@ -1,0 +1,19 @@
+databases:
+  - name: zcloudpass-db
+    plan: free
+    databaseName: zcloudpass
+
+services:
+  - type: web
+    name: zcloudpass-backend
+    runtime: rust
+    plan: free
+    buildCommand: cargo build --release
+    startCommand: ./target/release/zcloudpass-backend
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zcloudpass-db
+          property: connectionString
+      - key: BIND_ADDRESS
+        value: "0.0.0.0:10000"
