@@ -35,6 +35,8 @@ async fn main() {
         }
     });
 
+    println!("Server running on http://{}", bind);
+
     let listener = tokio::net::TcpListener::bind(&bind)
         .await
         .expect("Failed to bind TCP listener");
