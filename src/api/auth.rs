@@ -16,12 +16,14 @@ use password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 
 use crate::middleware::AuthUser;
 
+/// Response returned after successful registration.
 #[derive(Serialize)]
 pub struct RegisterResponse {
     pub id: i32,
     pub email: String,
 }
 
+/// Request body for registering a new user.
 #[derive(Deserialize)]
 pub struct RegisterRequest {
     pub username: Option<String>,
@@ -30,24 +32,28 @@ pub struct RegisterRequest {
     pub encrypted_vault: Option<String>,
 }
 
+/// Login request body.
 #[derive(Deserialize)]
 pub struct SessionCreateRequest {
     pub email: String,
     pub master_password: String,
 }
 
+/// Response returned when a session is created.
 #[derive(Serialize)]
 pub struct SessionCreateResponse {
     pub session_token: String,
     pub expires_at: String,
 }
 
+/// Payload for changing a user's master password.
 #[derive(Deserialize)]
 pub struct ChangePasswordRequest {
     pub current_password: String,
     pub new_password: String,
 }
 
+/// Compose and return the auth-related router (register/login/change-password).
 pub fn router() -> Router {
     Router::new()
         .route("/register", post(register_user))
@@ -57,10 +63,15 @@ pub fn router() -> Router {
         .route("/health", get(health))
 }
 
+/// Simple health endpoint for the auth subsystem.
 async fn health() -> &'static str {
     "auth ok"
 }
 
+/// Change the authenticated user's password.
+///
+/// Verifies the provided `current_password`, then stores an Argon2
+/// hash for `new_password` in the database.
 async fn change_password(
     auth_user: AuthUser,
     Extension(state): Extension<Arc<crate::AppState>>,
@@ -169,6 +180,7 @@ async fn register_user(
             Ok(AxumJson(RegisterResponse { id, email }))
         }
         Err(e) => {
+            // Insertion errors are treated as a conflict (e.g. duplicate email).
             eprintln!("register error: {:?}", e);
             Err(StatusCode::CONFLICT)
         }

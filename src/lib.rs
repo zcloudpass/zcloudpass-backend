@@ -1,13 +1,25 @@
+//! Core library for the zcloudpass backend.
+//!
+//! This crate exposes the application `AppState`, helpers to ensure the
+//! database schema is present, and the top-level `api` and `middleware`
+//! modules used by the HTTP server.
+
 pub mod api;
 pub mod middleware;
 
+/// Shared application state stored inside an `Arc` and attached to Axum
+/// request handlers via `Extension`.
 #[derive(Clone)]
 pub struct AppState {
+    /// Postgres connection pool used throughout the application.
     pub db: sqlx::PgPool,
 }
 
 /// Creates the `users` and `sessions` tables if they do not already exist.
-/// Also attempts to enable the `pgcrypto` extension (best-effort).
+///
+/// This is intended to be a convenience for development and tests. It also
+/// attempts to enable the `pgcrypto` extension (best-effort) and will return
+/// any SQL errors encountered while creating tables.
 pub async fn ensure_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
     match sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
         .execute(pool)

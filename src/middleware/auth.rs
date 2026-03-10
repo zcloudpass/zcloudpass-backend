@@ -4,8 +4,10 @@ use futures::FutureExt;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 
+/// Represents an authenticated user extracted by the auth middleware.
 #[derive(Debug, Clone)]
 pub struct AuthUser {
+    /// The numeric `id` of the user in the database.
     pub user_id: i32,
 }
 
@@ -15,6 +17,8 @@ where
 {
     type Rejection = StatusCode;
 
+    /// Extract `AuthUser` from request parts by validating the `Authorization`
+    /// header and looking up the session token in the database.
     fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
@@ -69,6 +73,7 @@ where
 }
 
 /// Extracts a bearer token from a raw Authorization header value.
+///
 /// Returns `Ok(token)` if the header has a valid `Bearer ` prefix, or
 /// `Err(StatusCode::UNAUTHORIZED)` otherwise.
 pub fn extract_bearer_token(auth_header: &str) -> Result<&str, StatusCode> {
@@ -81,6 +86,11 @@ pub fn extract_bearer_token(auth_header: &str) -> Result<&str, StatusCode> {
     }
 }
 
+/// Validate a session token and return the associated `AuthUser`.
+///
+/// The function checks that the session exists, is not expired, and that
+/// the linked user account is active. It also updates the session's
+/// `last_activity` timestamp.
 async fn validate_session_token(pool: &PgPool, token: &str) -> Result<AuthUser, StatusCode> {
     eprintln!("validate_session_token: checking token: {:?}", token);
 
@@ -113,12 +123,6 @@ async fn validate_session_token(pool: &PgPool, token: &str) -> Result<AuthUser, 
             let user_id: i32 = row
                 .try_get("user_id")
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-            /*
-            let email: String = row
-               .try_get("email")
-               .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            */
 
             let _ =
                 sqlx::query("UPDATE sessions SET last_activity = now() WHERE session_token = $1")

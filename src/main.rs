@@ -1,3 +1,6 @@
+//! Small HTTP binary that wires together the Axum router and application
+//! state and starts the server.
+
 use zcloudpass_backend::AppState;
 use zcloudpass_backend::api;
 
@@ -40,6 +43,6 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&bind)
         .await
         .expect("Failed to bind TCP listener");
-
+    // Start the HTTP server and await termination.
     axum::serve(listener, app).await.unwrap();
 }
