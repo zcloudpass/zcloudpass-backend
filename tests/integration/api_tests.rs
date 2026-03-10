@@ -11,8 +11,8 @@ use axum::routing::get;
 use axum::{Extension, Router};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower::ServiceExt;
 use tower_http::cors::CorsLayer;
@@ -83,7 +83,8 @@ async fn json_request(
     let value = if bytes.is_empty() {
         Value::Null
     } else {
-        serde_json::from_slice(&bytes).unwrap_or(Value::String(String::from_utf8_lossy(&bytes).to_string()))
+        serde_json::from_slice(&bytes)
+            .unwrap_or(Value::String(String::from_utf8_lossy(&bytes).to_string()))
     };
 
     (status, value)
@@ -339,14 +340,8 @@ async fn vault_without_auth_returns_unauthorized() {
 async fn vault_with_invalid_token_returns_unauthorized() {
     let (app, _pool) = setup().await;
 
-    let (status, _) = json_request(
-        app,
-        "GET",
-        "/api/v1/vault/",
-        None,
-        Some("not-a-real-token"),
-    )
-    .await;
+    let (status, _) =
+        json_request(app, "GET", "/api/v1/vault/", None, Some("not-a-real-token")).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 

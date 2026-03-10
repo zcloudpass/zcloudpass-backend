@@ -4,10 +4,10 @@
 //! Only the `/health` and `/api/v1/auth/health` endpoints can be tested
 //! without DB, since all other routes require database connections.
 
+use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
-use axum::Router;
 use http_body_util::BodyExt;
 use tower::ServiceExt; // for `oneshot`
 
@@ -156,10 +156,7 @@ async fn health_allows_head_method() {
 async fn root_path_returns_404() {
     let app = health_router();
 
-    let req = Request::builder()
-        .uri("/")
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri("/").body(Body::empty()).unwrap();
 
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);

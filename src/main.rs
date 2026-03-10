@@ -1,5 +1,5 @@
-use zcloudpass_backend::api;
 use zcloudpass_backend::AppState;
+use zcloudpass_backend::api;
 
 use axum::{Extension, Router, routing::get};
 use sqlx::postgres::PgPoolOptions;
@@ -30,11 +30,9 @@ async fn main() {
         .layer(CorsLayer::permissive())
         .layer(Extension(shared_state));
 
-    let bind = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| {
-        match std::env::var("PORT") {
-            Ok(port) => format!("0.0.0.0:{}", port),
-            Err(_) => "0.0.0.0:3000".to_string(),
-        }
+    let bind = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| match std::env::var("PORT") {
+        Ok(port) => format!("0.0.0.0:{}", port),
+        Err(_) => "0.0.0.0:3000".to_string(),
     });
 
     println!("Server running on http://{}", bind);
@@ -45,4 +43,3 @@ async fn main() {
 
     axum::serve(listener, app).await.unwrap();
 }
-
