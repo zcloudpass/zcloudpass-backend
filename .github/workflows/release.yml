@@ -18,17 +18,7 @@ jobs:
   release:
     name: Build & Release
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: zcloudpass_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval=10s --health-timeout=5s --health-retries=5
+    # No test service in release job; tests run in separate CI workflow.
 
     steps:
       - name: Checkout repository
@@ -42,17 +32,6 @@ jobs:
 
       - name: Build release binary
         run: cargo build --release
-
-      - name: Run tests
-        run: |
-          echo "Waiting for Postgres to accept connections..."
-          for i in {1..30}; do
-            (echo > /dev/tcp/localhost/5432) >/dev/null 2>&1 && break || sleep 1
-          done
-          export DATABASE_URL="postgres://user:password@localhost:5432/zcloudpass_test"
-          export RUST_TEST_THREADS=1
-          export RUST_BACKTRACE=1
-          cargo test --verbose
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3

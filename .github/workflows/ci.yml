@@ -52,8 +52,6 @@ jobs:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
           POSTGRES_DB: zcloudpass_test
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U test"
           --health-interval 10s
@@ -62,6 +60,8 @@ jobs:
 
     env:
       DATABASE_URL: postgres://test:test@localhost:5432/zcloudpass_test
+      RUST_TEST_THREADS: 1
+      RUST_BACKTRACE: 1
 
     steps:
       - name: Checkout repository
@@ -73,5 +73,22 @@ jobs:
       - name: Cache Cargo registry & build
         uses: Swatinem/rust-cache@v2
 
+      - name: Wait for Postgres and prepare DB
+        run: |
+          echo "Waiting for Postgres to accept connections..."
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U test && break || sleep 1
+          done
+          export PGPASSWORD=test
+          echo "Creating clean test schema"
+          psql -h localhost -U test -d zcloudpass_test -c "DROP TABLE IF EXISTS sessions CASCADE; DROP TABLE IF EXISTS users CASCADE;"
+          psql -h localhost -U test -d zcloudpass_test -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+          psql -h localhost -U test -d zcloudpass_test -c "CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(255), email VARCHAR(255) UNIQUE NOT NULL, srp_salt TEXT, srp_verifier TEXT, encrypted_vault TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login TIMESTAMP, account_status VARCHAR(20) DEFAULT 'active');"
+          psql -h localhost -U test -d zcloudpass_test -c "CREATE TABLE IF NOT EXISTS sessions (id SERIAL PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE CASCADE, session_token TEXT UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, expires_at TIMESTAMP, last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
+
       - name: Run integration tests
-        run: cargo test --test integration --verbose
+        run: |
+          export DATABASE_URL="postgres://test:test@localhost:5432/zcloudpass_test"
+          export RUST_TEST_THREADS=1
+          export RUST_BACKTRACE=1
+          cargo test --test integration --verbose

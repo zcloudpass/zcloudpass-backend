@@ -20,11 +20,7 @@ pub async fn ensure_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
             e
         ),
     }
-
-    // Create `users` table. If there's an error indicating the object
-    // already exists (which can happen when tests run concurrently),
-    // log and continue instead of failing the whole setup.
-    if let Err(e) = sqlx::query(
+    sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -40,20 +36,9 @@ pub async fn ensure_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "#,
     )
     .execute(pool)
-    .await
-    {
-        let s = format!("{}", e);
-        if s.contains("already exists") || s.contains("duplicate key value") {
-            eprintln!(
-                "notice: users table/create already exists (continuing): {:?}",
-                e
-            );
-        } else {
-            return Err(e);
-        }
-    }
+    .await?;
 
-    if let Err(e) = sqlx::query(
+    sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS sessions (
             id SERIAL PRIMARY KEY,
@@ -66,18 +51,6 @@ pub async fn ensure_tables(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         "#,
     )
     .execute(pool)
-    .await
-    {
-        let s = format!("{}", e);
-        if s.contains("already exists") || s.contains("duplicate key value") {
-            eprintln!(
-                "notice: sessions table/create already exists (continuing): {:?}",
-                e
-            );
-        } else {
-            return Err(e);
-        }
-    }
-
+    .await?;
     Ok(())
 }
