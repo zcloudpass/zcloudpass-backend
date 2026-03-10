@@ -27,6 +27,11 @@ jobs:
       - name: Cache Cargo registry & build
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -75,11 +80,20 @@ jobs:
 
       - name: Wait for Postgres and prepare DB
         run: |
+          set -x
           echo "Waiting for Postgres to accept connections..."
-          for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U test && break || sleep 1
+          for i in {1..60}; do
+            pg_isready -h localhost -p 5432 -U test && break || {
+              echo "waiting... ($i)"
+              sleep 1
+            }
           done
+          echo "Debug: ss -ltn"
+          ss -ltn || true
+          echo "Debug: ps aux | grep postgres"
+          ps aux | grep postgres || true
           export PGPASSWORD=test
+          echo "psql version:"; psql --version || true
           echo "Creating clean test schema"
           psql -h localhost -U test -d zcloudpass_test -c "DROP TABLE IF EXISTS sessions CASCADE; DROP TABLE IF EXISTS users CASCADE;"
           psql -h localhost -U test -d zcloudpass_test -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
