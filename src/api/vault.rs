@@ -22,8 +22,11 @@ pub struct VaultUpdate {
 
 pub fn router() -> Router {
     Router::new()
+        // Accept both `/api/v1/vault` and `/api/v1/vault/` paths.
         .route("/", get(get_vault))
         .route("/", put(update_vault))
+        .route("", get(get_vault))
+        .route("", put(update_vault))
 }
 
 async fn get_vault(
