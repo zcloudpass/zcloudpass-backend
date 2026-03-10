@@ -10,26 +10,22 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 
-/// Response returned for vault GET requests.
 #[derive(Serialize)]
 pub struct VaultResponse {
     pub encrypted_vault: Option<String>,
 }
 
-/// Payload accepted when updating the encrypted vault blob.
 #[derive(Deserialize)]
 pub struct VaultUpdate {
     pub encrypted_vault: String,
 }
 
-/// Router for the vault endpoints mounted under `/api/v1/vault`.
 pub fn router() -> Router {
     Router::new()
         .route("/", get(get_vault))
         .route("/", put(update_vault))
 }
 
-/// Retrieve the current user's encrypted vault (may be `null`).
 async fn get_vault(
     auth_user: AuthUser,
     Extension(state): Extension<Arc<crate::AppState>>,
